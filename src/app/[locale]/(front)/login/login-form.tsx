@@ -100,12 +100,12 @@ export function LoginForm({ locale, callbackURL }: { locale: Locale, callbackURL
                 <Field>
                     <div className="flex items-center">
                         <FieldLabel htmlFor="password">{t('common.password')}</FieldLabel>
-                        <a
-                            href="#"
+                        <Link
+                            href={`/${locale}/forgot-password`}
                             className="ml-auto text-sm underline-offset-4 hover:underline"
                         >
                             {t('common.forgotPassword')}
-                        </a>
+                        </Link>
                     </div>
                     <Input id="password" type="password" name="password" required />
                 </Field>

@@ -29,10 +29,32 @@ export const auth = betterAuth({
             }
         }
     },
+    trustedOrigins: [appUrl, 'http://localhost:3000'],
     emailAndPassword: {
         enabled: true,
         requireEmailVerification: true,
 
+        // Disable eslint no unused variables
+        /* eslint-disable @typescript-eslint/no-unused-vars */
+        sendResetPassword: async ({ user, url, token }: { user: User, url: string, token: string }, request?: Request) => {
+            let locale: Locale = request?.url?.split('/')[1] as Locale;
+            if (locale && locales.includes(locale as Locale)) {
+                locale = locale as Locale;
+            } else {
+                locale = defaultLocale;
+            }
+            await sendPasswordReset(user.email, url, {
+                userName: user.name || user.email,
+                locale: locale, // You can extract locale from request headers or user preferences
+                appName: appName
+            });
+        },
+        // Disable eslint no unused variables
+        /* eslint-disable @typescript-eslint/no-unused-vars */
+        onPasswordReset: async ({ user }: { user: User }, request?: Request) => {
+            // your logic here
+            console.log(`Password for user ${user.email} has been reset.`);
+        },
     },
     emailVerification: {
         enabled: true,
@@ -52,27 +74,6 @@ export const auth = betterAuth({
                 locale: locale, // You can extract locale from request headers or user preferences
                 appName: appName
             });
-        },
-        // Disable eslint no unused variables
-        /* eslint-disable @typescript-eslint/no-unused-vars */
-        sendResetPassword: async ({ user, url, token }: { user: User, url: string, token: string }, request: Request) => {
-            let locale: Locale = request?.url.split('/')[1] as Locale;
-            if (locale && locales.includes(locale as Locale)) {
-                locale = locale as Locale;
-            } else {
-                locale = defaultLocale;
-            }
-            await sendPasswordReset(user.email, url, {
-                userName: user.name || undefined,
-                locale: locale, // You can extract locale from request headers or user preferences
-                appName: appName
-            });
-        },
-        // Disable eslint no unused variables
-        /* eslint-disable @typescript-eslint/no-unused-vars */
-        onPasswordReset: async ({ user }: { user: User }, request: Request) => {
-            // your logic here
-            console.log(`Password for user ${user.email} has been reset.`);
         },
     },
     disabledPaths: [
