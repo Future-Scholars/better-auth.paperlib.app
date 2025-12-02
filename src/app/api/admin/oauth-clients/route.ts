@@ -126,3 +126,4 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: 'Internal server error', error }, { status: 500 });
     }
 }
+//'Failing row contains (d43f4a2c-6b8d-4561-b6b9-ab45a083d7ff, Test-1, null, null, 7fa8d93b-6790-4eb7-8cee-631cae0446e1, be09f644c276ee4f908db12c16f3d6e0f2427d463b17d0e310a73e627e87684e, null, web, f, 998d16bb-518b-4a88-a1c1-e2f8a9b86dfa, 2025-12-02 19:21:17.225+00, 2025-12-02 19:21:17.225+00, http://localhost:3000/api/auth/oauth2/callback/zhuoling.space).'
