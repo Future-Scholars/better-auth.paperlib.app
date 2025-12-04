@@ -132,7 +132,7 @@ export const auth = betterAuth({
             metadata: {
                 issuer: appUrl,
             },
-            scopes: ["openid", "profile", "email", "offline_access"],
+            scopes: ["openid", "profile", "email", "offline_access", "roles"],
             useJWTPlugin: true, // Enable JWT plugin integration
             allowDynamicClientRegistration: false,
             loginPage: "/login",
@@ -145,7 +145,7 @@ export const auth = betterAuth({
             getAdditionalUserInfoClaim: async (user, scopes, client) => {
                 const claims: Record<string, any> = {};
                 if (scopes.includes('roles')) {
-                    claims.roles = user.role;
+                    claims.roles = [user.role ?? 'user'];
                 }
                 return claims;
             },
