@@ -132,7 +132,7 @@ export const auth = betterAuth({
             metadata: {
                 issuer: appUrl,
             },
-            scopes: ["openid", "profile", "email", "offline_access"],
+            scopes: ["openid", "profile", "email", "offline_access", "roles"],
             useJWTPlugin: true, // Enable JWT plugin integration
             allowDynamicClientRegistration: false,
             loginPage: "/login",
