@@ -118,8 +118,9 @@ export async function PATCH(request: NextRequest, { params }: {
             ? redirectUrlsValue.split(',').map((uri: string) => uri.trim()).filter(Boolean)
             : [];
 
+        const { redirectUrls, ...rest } = updatedClient;
         return NextResponse.json({
-            ...updatedClient,
+            ...rest,
             redirectURIs: redirectArray,
             redirectURLsRaw: redirectUrlsValue,
         });
