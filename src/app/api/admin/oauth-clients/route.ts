@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
             return {
                 ...rest,
-                redirectURLs: redirectArray,
+                redirectURIs: redirectArray,
                 redirectURLsRaw: redirectURLs,
             };
         });

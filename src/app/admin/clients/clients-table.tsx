@@ -32,7 +32,7 @@ interface OAuthClient {
     name: string;
     clientId: string;
     clientSecret?: string;
-    redirectURLs: string[];
+    redirectURIs: string[];
     type: string;
     disabled?: boolean;
     icon?: string;

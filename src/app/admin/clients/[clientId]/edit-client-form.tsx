@@ -44,8 +44,8 @@ function getRedirectFieldValues(client?: OAuthClientApiDTO): string[] {
         return [""];
     }
 
-    const redirectArray = Array.isArray(client.redirectURLs)
-        ? client.redirectURLs
+    const redirectArray = Array.isArray(client.redirectURIs)
+        ? client.redirectURIs
         : formatRedirectUris(client.redirectURLsRaw ?? "");
 
     if (!redirectArray.length) {
@@ -131,7 +131,7 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
 
         const parsedValues = oauthClientUpdateFormSchema.parse(values);
         const payload = buildUpdateOAuthClientRequest(parsedValues);
-        const redirectUris = payload.redirectURLs;
+        const redirectUris = payload.redirectURIs;
 
         const redirectValidation = validateRedirectUris(redirectUris);
         if (!redirectValidation.valid) {

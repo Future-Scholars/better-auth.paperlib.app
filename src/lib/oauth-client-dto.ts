@@ -159,7 +159,7 @@ export const updateOAuthClientRequestSchema = z.object({
         .trim()
         .min(1, "Client name is required")
         .max(OAUTH_CLIENT_NAME_MAX_LENGTH, `Client name must be less than ${OAUTH_CLIENT_NAME_MAX_LENGTH} characters`),
-    redirectURLs: redirectUriListSchema,
+    redirectURIs: redirectUriListSchema,
     icon: optionalUrlSchema,
     metadata: z.string().trim().optional(),
     disabled: z.boolean().optional(),
@@ -174,7 +174,7 @@ export const oauthClientAdminResponseSchema = z
         name: z.string().nullable(),
         clientId: z.string(),
         clientSecret: z.string().nullable().optional(),
-        redirectURLs: redirectUriListSchema.default([]),
+        redirectURIs: redirectUriListSchema.default([]),
         redirectURLsRaw: z.string().nullable().optional(),
         type: z.string(),
         disabled: z.boolean().nullable().optional(),
@@ -236,7 +236,7 @@ export function buildUpdateOAuthClientRequest(
 ): UpdateOAuthClientRequest {
     const payload = {
         name: form.name.trim(),
-        redirectURLs: normalizeRedirectUris(form.redirectUrls),
+        redirectURIs: normalizeRedirectUris(form.redirectUrls),
         icon: normalizeOptionalInput(form.icon),
         disabled: form.disabled,
         type: form.type,

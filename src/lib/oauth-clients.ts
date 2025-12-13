@@ -8,7 +8,7 @@ export interface OAuthClientApiDTO {
     name: string;
     clientId: string;
     clientSecret?: string;
-    redirectURLs: string[];
+    redirectURIs: string[];
     redirectURLsRaw?: string;
     type: string;
     disabled?: boolean;
