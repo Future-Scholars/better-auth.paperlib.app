@@ -39,8 +39,9 @@ export async function GET(request: NextRequest, { params }: {
             ? client.redirectUrls.split(',').map((uri: string) => uri.trim()).filter(Boolean)
             : [];
 
+        const { redirectUrls, ...rest } = client;
         return NextResponse.json({
-            ...client,
+            ...rest,
             redirectURIs: redirectArray,
             redirectURLsRaw: client.redirectUrls,
         });
