@@ -40,7 +40,7 @@ export async function GET(request: NextRequest, { params }: {
 
         return NextResponse.json({
             ...client,
-            redirectURLs: redirectArray,
+            redirectURIs: redirectArray,
             redirectURLsRaw: client.redirectURLs,
         });
     } catch (error) {
@@ -68,9 +68,9 @@ export async function PATCH(request: NextRequest, { params }: {
         if (!parseResult.success) {
             return NextResponse.json({ error: parseResult.error }, { status: 400 });
         }
-        const { name, redirectURLs, icon, metadata, disabled, type } = parseResult.data;
+        const { name, redirectURIs, icon, metadata, disabled, type } = parseResult.data;
 
-        const normalizedRedirects = normalizeRedirectUris(redirectURLs);
+        const normalizedRedirects = normalizeRedirectUris(redirectURIs);
 
         const uriValidation = validateRedirectUris(normalizedRedirects);
         if (!uriValidation.valid) {
@@ -83,7 +83,7 @@ export async function PATCH(request: NextRequest, { params }: {
         };
 
         if (name !== undefined) updateData.name = name;
-        if (redirectURLs !== undefined) updateData.redirectURLs = normalizedRedirects.join(',');
+        if (redirectURIs !== undefined) updateData.redirectURLs = normalizedRedirects.join(',');
         if (icon !== undefined) updateData.icon = normalizeOptionalInput(icon);
         if (metadata !== undefined) updateData.metadata = metadata;
         if (disabled !== undefined) updateData.disabled = disabled;
@@ -114,7 +114,7 @@ export async function PATCH(request: NextRequest, { params }: {
 
         return NextResponse.json({
             ...updatedClient,
-            redirectURLs: redirectArray,
+            redirectURIs: redirectArray,
             redirectURLsRaw: updatedClient.redirectURLs,
         });
     } catch (error) {
