@@ -35,15 +35,16 @@ export async function GET(request: NextRequest, { params }: {
         }
 
         // Database field is redirectUrls (lowercase s) after migration
-        const redirectArray = client.redirectUrls
-            ? client.redirectUrls.split(',').map((uri: string) => uri.trim()).filter(Boolean)
+        const redirectUrlsValue = client.redirectUrls || '';
+        const redirectArray = redirectUrlsValue
+            ? redirectUrlsValue.split(',').map((uri: string) => uri.trim()).filter(Boolean)
             : [];
 
         const { redirectUrls, ...rest } = client;
         return NextResponse.json({
             ...rest,
             redirectURIs: redirectArray,
-            redirectURLsRaw: client.redirectUrls,
+            redirectURLsRaw: redirectUrlsValue,
         });
     } catch (error) {
         console.error('Error fetching OAuth client:', error);
