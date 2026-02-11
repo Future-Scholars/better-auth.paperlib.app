@@ -1,24 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CircleAlert, CheckCircle, Loader2, RefreshCw, Eye, EyeOff, Plus, X, ChevronDown } from "lucide-react";
+import { CircleAlert, CheckCircle, Copy, Loader2, RefreshCw, Plus, X, ChevronDown } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmationDialog, SecretDisplayDialog } from "@/components/confirmation-dialog";
-import {
-    formatRedirectUris,
-    OAuthClientApiDTO,
-    validateRedirectUris,
-} from "@/lib/oauth-clients";
-import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
 import { Controller, useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -26,32 +21,72 @@ import {
     DropdownMenuRadioItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-    oauthClientUpdateFormSchema,
-    type OAuthClientUpdateFormInput,
-    oauthClientUpdateFormDefaults,
-    buildUpdateOAuthClientRequest,
-    ensureAtLeastOneRedirectUri,
-} from "@/lib/oauth-client-dto";
+import { z } from "zod";
 import { Route } from "next";
+import { OAuthClient } from "@better-auth/oauth-provider";
 
 interface EditOAuthClientFormProps {
     clientId: string;
 }
 
-function getRedirectFieldValues(client?: OAuthClientApiDTO): string[] {
-    if (!client) {
+// Form schema
+const oauthClientUpdateFormSchema = z.object({
+    client_name: z.string().min(1, "Client name is required").max(256, "Client name must be less than 256 characters"),
+    redirectUrls: z.array(z.url("Invalid URL")).min(1, "At least one redirect URI is required"),
+    icon: z.url("Invalid URL").optional().or(z.literal("")),
+    type: z.enum(["web", "native", "user-agent-based"]),
+    scope: z.string().optional(),
+    client_uri: z.url("Invalid URL").optional().or(z.literal("")),
+    logo_uri: z.url("Invalid URL").optional().or(z.literal("")),
+    contacts: z.array(z.string()).optional(),
+    tos_uri: z.url("Invalid URL").optional().or(z.literal("")),
+    policy_uri: z.url("Invalid URL").optional().or(z.literal("")),
+    software_id: z.string().optional().or(z.literal("")),
+    software_version: z.string().optional().or(z.literal("")),
+    software_statement: z.url("Invalid URL").optional().or(z.literal("")),
+    post_logout_redirect_uris: z.array(z.union([z.url("Invalid URL"), z.literal("")])).optional(),
+    grant_types: z.array(z.enum(["authorization_code", "client_credentials", "refresh_token"])).optional(),
+    response_types: z.array(z.enum(["code"])).optional(),
+    skip_consent: z.boolean().optional(),
+});
+
+type OAuthClientUpdateFormInput = z.infer<typeof oauthClientUpdateFormSchema>;
+
+const oauthClientUpdateFormDefaults: OAuthClientUpdateFormInput = {
+    client_name: "",
+    redirectUrls: [""],
+    icon: "",
+    type: "web",
+    scope: "openid profile email offline_access",
+    client_uri: "",
+    logo_uri: "",
+    contacts: [],
+    tos_uri: "",
+    policy_uri: "",
+    software_id: "",
+    software_version: "",
+    software_statement: "",
+    post_logout_redirect_uris: [],
+    grant_types: [],
+    response_types: ["code"],
+    skip_consent: false,
+};
+
+function ensureAtLeastOneRedirectUri(values: string[]): string[] {
+    if (!values.length) {
         return [""];
     }
+    return values;
+}
 
-    const redirectArray = Array.isArray(client.redirectURIs)
-        ? client.redirectURIs
-        : formatRedirectUris(client.redirectURLsRaw ?? "");
 
-    if (!redirectArray.length) {
-        return [""];
-    }
 
+function getRedirectFieldValues(client: OAuthClient | null): string[] {
+    if (!client) return [""];
+    const redirectArray = Array.isArray(client.redirect_uris)
+        ? client.redirect_uris
+        : [];
+    if (!redirectArray.length) return [""];
     return redirectArray;
 }
 
@@ -60,18 +95,19 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
     const [serverError, setServerError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [regeneratingSecret, setRegeneratingSecret] = useState(false);
-    const [showSecret, setShowSecret] = useState(false);
     const [secretDialogOpen, setSecretDialogOpen] = useState(false);
     const [newSecret, setNewSecret] = useState<string | null>(null);
     const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
     const [redirectUriError, setRedirectUriError] = useState<string | null>(null);
 
-    const {
-        data: client,
-        error: fetchError,
-        isLoading,
-        mutate,
-    } = useSWR<OAuthClientApiDTO>(`/api/admin/oauth-clients/${clientId}`, fetcher);
+    const fetcher = async (id: string) => {
+        const result = await authClient.oauth2.getClient({ query: { client_id: id } });
+        if (result.error) throw new Error(result.error.message ?? "Failed to load client");
+        return result.data;
+    };
+    const { data: client, error: fetchError, isLoading, mutate: mutateClient } = useSWR(clientId ? ["oauth-client", clientId] : null, () => fetcher(clientId!), {
+        revalidateOnFocus: false,
+    });
 
     const {
         control,
@@ -88,6 +124,9 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
     const watchedRedirectUris = watch("redirectUrls") ?? [];
     const redirectUriValues = ensureAtLeastOneRedirectUri(watchedRedirectUris);
 
+    const watchedPostLogoutUris = watch("post_logout_redirect_uris") ?? [];
+    const postLogoutUriValues = Array.isArray(watchedPostLogoutUris) ? watchedPostLogoutUris : [];
+
     const addRedirectUri = () => {
         setValue("redirectUrls", [...redirectUriValues, ""], {
             shouldDirty: true,
@@ -103,64 +142,121 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
         });
     };
 
-    useEffect(() => {
-        if (fetchError) {
-            const message = fetchError instanceof Error ? fetchError.message : "Failed to load client";
-            setServerError(message);
-        }
-    }, [fetchError]);
+    const addPostLogoutUri = () => {
+        setValue("post_logout_redirect_uris", [...postLogoutUriValues, ""], {
+            shouldDirty: true,
+            shouldTouch: true,
+        });
+    };
+
+    const removePostLogoutUri = (index: number) => {
+        const nextValues = postLogoutUriValues.filter((_, i) => i !== index);
+        setValue("post_logout_redirect_uris", nextValues, {
+            shouldDirty: true,
+            shouldTouch: true,
+        });
+    };
 
     useEffect(() => {
-        if (client) {
+        if (client && !fetchError) {
             reset({
-                name: client.name ?? "",
+                client_name: client.client_name ?? "",
                 redirectUrls: ensureAtLeastOneRedirectUri(getRedirectFieldValues(client)),
-                icon: client.icon ?? "",
-                disabled: client.disabled ?? false,
-                type: (client.type === "web" || client.type === "public" || client.type === "mobile") 
-                    ? client.type 
+                icon: String((client as Record<string, unknown>).icon ?? client.logo_uri ?? ""),
+                type: (client.type === "web" || client.type === "native" || client.type === "user-agent-based")
+                    ? client.type
                     : "web",
+                scope: client.scope ?? "openid profile email offline_access",
+                client_uri: client.client_uri ?? "",
+                logo_uri: client.logo_uri ?? "",
+                contacts: Array.isArray(client.contacts) ? client.contacts : [],
+                tos_uri: client.tos_uri ?? "",
+                policy_uri: client.policy_uri ?? "",
+                software_id: client.software_id ?? "",
+                software_version: client.software_version ?? "",
+                software_statement: client.software_statement ?? "",
+                post_logout_redirect_uris: Array.isArray(client.post_logout_redirect_uris) ? client.post_logout_redirect_uris : [],
+                grant_types: Array.isArray(client.grant_types) ? client.grant_types : [],
+                response_types: Array.isArray(client.response_types) && client.response_types.length > 0 ? client.response_types : ["code"],
+                skip_consent: client.skip_consent ?? false,
             });
             setServerError(null);
         }
-    }, [client, reset]);
+    }, [client, reset, fetchError]);
 
     const onSubmit: SubmitHandler<OAuthClientUpdateFormInput> = async (values) => {
         setServerError(null);
         setRedirectUriError(null);
 
-        const parsedValues = oauthClientUpdateFormSchema.parse(values);
-        const payload = buildUpdateOAuthClientRequest(parsedValues);
-        const redirectUris = payload.redirectURIs;
+        // Normalize redirect URIs
+        const redirectUris = values.redirectUrls
+            .map(uri => uri.trim())
+            .filter(Boolean);
 
-        const redirectValidation = validateRedirectUris(redirectUris);
-        if (!redirectValidation.valid) {
-            setRedirectUriError(redirectValidation.errors.join("\n"));
+        // Basic validation
+        if (redirectUris.length === 0) {
+            setRedirectUriError("At least one redirect URI is required");
             return;
         }
 
+        // Validate redirect URIs
+        const invalidUris: string[] = [];
+        for (const uri of redirectUris) {
+            try {
+                const url = new URL(uri);
+                if (url.protocol !== 'https:' && url.protocol !== 'http:' && !url.hostname.includes('localhost') && !url.hostname.includes('127.0.0.1')) {
+                    invalidUris.push(`${uri} must use HTTPS (or HTTP for localhost)`);
+                }
+            } catch {
+                invalidUris.push(`${uri} is not a valid URL`);
+            }
+        }
+
+        if (invalidUris.length > 0) {
+            setRedirectUriError(invalidUris.join("\n"));
+            return;
+        }
+
+        const postLogoutUris = (values.post_logout_redirect_uris ?? [])
+            .map((uri: string) => uri.trim())
+            .filter(Boolean);
+
         try {
-            const response = await fetch(`/api/admin/oauth-clients/${clientId}`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(payload),
+            const updatePayload = {
+                client_name: values.client_name.trim(),
+                redirect_uris: redirectUris,
+                scope: values.scope?.trim() || undefined,
+                type: values.type,
+                client_uri: values.client_uri?.trim() || undefined,
+                logo_uri: values.logo_uri?.trim() || values.icon?.trim() || undefined,
+                contacts: Array.isArray(values.contacts) && values.contacts.length > 0 ? values.contacts : undefined,
+                tos_uri: values.tos_uri?.trim() || undefined,
+                policy_uri: values.policy_uri?.trim() || undefined,
+                software_id: values.software_id?.trim() || undefined,
+                software_version: values.software_version?.trim() || undefined,
+                software_statement: values.software_statement?.trim() || undefined,
+                post_logout_redirect_uris: postLogoutUris.length > 0 ? postLogoutUris : undefined,
+                grant_types: (values.grant_types ?? []).length > 0 ? values.grant_types : undefined,
+                response_types: (values.response_types ?? []).length > 0 ? values.response_types : undefined,
+            };
+            const result = await authClient.oauth2.updateClient({
+                client_id: clientId,
+                update: updatePayload,
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: "Failed to update OAuth client" }));
-                throw new Error(errorData.error || "Failed to update OAuth client");
+            if (result.error) {
+                setServerError(result.error.message ?? "Failed to update OAuth client");
+                return;
             }
 
-            const updatedClient: OAuthClientApiDTO = await response.json();
-            mutate(updatedClient, false);
-            setSuccess(true);
-            setTimeout(() => setSuccess(false), 3000);
+            if (result.data) {
+                await mutateClient(result.data);
+                setSuccess(true);
+                setTimeout(() => setSuccess(false), 3000);
+            }
         } catch (error) {
             console.error("Error updating OAuth client:", error);
-            const message = error instanceof Error ? error.message : "Failed to update OAuth client";
-            setServerError(message);
+            setServerError(error instanceof Error ? error.message : "Failed to update OAuth client");
         }
     };
 
@@ -173,27 +269,26 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
             setRegeneratingSecret(true);
             setRotateConfirmOpen(false);
 
-            const response = await fetch(`/api/admin/oauth-clients/${clientId}/regenerate-secret`, {
-                method: "POST",
+            const result = await authClient.oauth2.client.rotateSecret({
+                client_id: clientId,
             });
 
-            if (!response.ok) {
-                throw new Error("Failed to regenerate client secret");
+            if (result.error) {
+                setServerError(result.error.message ?? "Failed to regenerate client secret");
+                return;
             }
 
-            const data = await response.json();
-            setNewSecret(data.clientSecret);
-            setSecretDialogOpen(true);
-
-            const clientResponse = await fetch(`/api/admin/oauth-clients/${clientId}`);
-            if (clientResponse.ok) {
-                const updatedClient: OAuthClientApiDTO = await clientResponse.json();
-                mutate(updatedClient, false);
+            if (result.data) {
+                const data = result.data;
+                const secret = data.client_secret;
+                if (secret) {
+                    setNewSecret(secret);
+                    setSecretDialogOpen(true);
+                }
+                await mutateClient(result.data);
             }
-        } catch (error) {
-            console.error("Error regenerating client secret:", error);
-            const message = error instanceof Error ? error.message : "Failed to regenerate client secret";
-            setServerError(message);
+        } catch (err) {
+            setServerError(err instanceof Error ? err.message : "Failed to regenerate client secret");
         } finally {
             setRegeneratingSecret(false);
         }
@@ -218,30 +313,25 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
         );
     }
 
-    if (!client) {
+    if (fetchError || !client) {
         return (
             <Card className="max-w-2xl">
                 <CardContent>
                     <Alert variant="destructive">
                         <CircleAlert className="h-4 w-4" />
                         <AlertTitle>Client Not Found</AlertTitle>
-                        <AlertDescription>The requested OAuth client could not be found.</AlertDescription>
+                        <AlertDescription>
+                            {fetchError?.message ?? "The requested OAuth client could not be found."}
+                        </AlertDescription>
                     </Alert>
                 </CardContent>
             </Card>
         );
     }
 
+
     return (
         <div className="space-y-6">
-            <Card className="max-w-2xl">
-                <CardHeader>
-                    <CardTitle>OAuth Client Information</CardTitle>
-                    <CardDescription>
-                        Update OAuth client details and settings
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                         {serverError && (
                             <Alert variant="destructive">
@@ -261,21 +351,57 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
 
                         <FieldGroup>
                             <Field>
-                                <FieldLabel htmlFor="name">Client Name *</FieldLabel>
+                                <FieldLabel>Client ID</FieldLabel>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        readOnly
+                                        value={client.client_id}
+                                        className="font-mono bg-muted"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={async () => {
+                                            try {
+                                                await navigator.clipboard.writeText(client.client_id);
+                                            } catch (e) {
+                                                console.error("Copy failed", e);
+                                            }
+                                        }}
+                                        aria-label="Copy Client ID"
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleRegenerateSecret}
+                                        disabled={regeneratingSecret}
+                                    >
+                                        <RefreshCw className={`h-4 w-4 mr-2 ${regeneratingSecret ? "animate-spin" : ""}`} />
+                                        Regenerate Secret
+                                    </Button>
+                                </div>
+                                <FieldDescription>Use this ID in your OAuth client configuration. Copy or regenerate the secret as needed.</FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="client_name">Client Name *</FieldLabel>
                                 <Controller
                                     control={control}
-                                    name="name"
+                                    name="client_name"
                                     render={({ field }) => (
                                         <Input
                                             {...field}
-                                            id="name"
+                                            id="client_name"
                                             placeholder="My OAuth Client"
-                                            aria-invalid={Boolean(errors.name)}
+                                            aria-invalid={Boolean(errors.client_name)}
                                         />
                                     )}
                                 />
-                                <FieldDescription className={errors.name ? "text-destructive" : undefined}>
-                                    {errors.name?.message ?? "Provide a descriptive name to identify this client."}
+                                <FieldDescription className={errors.client_name ? "text-destructive" : undefined}>
+                                    {errors.client_name?.message ?? "Provide a descriptive name to identify this client."}
                                 </FieldDescription>
                             </Field>
 
@@ -366,7 +492,7 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
                                                     <ChevronDown className="h-4 w-4 opacity-50" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                                            <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                                                 <DropdownMenuRadioGroup
                                                     value={field.value}
                                                     onValueChange={field.onChange}
@@ -374,11 +500,11 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
                                                     <DropdownMenuRadioItem value="web">
                                                         Web
                                                     </DropdownMenuRadioItem>
-                                                    <DropdownMenuRadioItem value="public">
-                                                        Public
+                                                    <DropdownMenuRadioItem value="native">
+                                                        Native
                                                     </DropdownMenuRadioItem>
-                                                    <DropdownMenuRadioItem value="mobile">
-                                                        Mobile
+                                                    <DropdownMenuRadioItem value="user-agent-based">
+                                                        User-agent based
                                                     </DropdownMenuRadioItem>
                                                 </DropdownMenuRadioGroup>
                                             </DropdownMenuContent>
@@ -386,106 +512,330 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
                                     )}
                                 />
                                 <FieldDescription className={errors.type ? "text-destructive" : undefined}>
-                                    {errors.type?.message ?? "The type of OAuth client (web, public, or mobile)."}
+                                    {errors.type?.message ?? "The type of OAuth client (web, native, or user-agent-based)."}
                                 </FieldDescription>
                             </Field>
 
                             <Field>
-                                <div className="flex items-center space-x-2">
-                                    <Controller
-                                        control={control}
-                                        name="disabled"
-                                        render={({ field }) => (
-                                            <Checkbox
-                                                id="disabled"
-                                                checked={field.value ?? false}
-                                                onCheckedChange={(checked) => field.onChange(Boolean(checked))}
-                                            />
-                                        )}
-                                    />
-                                    <FieldLabel htmlFor="disabled">Disabled</FieldLabel>
-                                </div>
-                                <FieldDescription>
-                                    Disable this OAuth client from being used
+                                <FieldLabel htmlFor="scope">Scope</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="scope"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="scope"
+                                            placeholder="openid profile email offline_access"
+                                            aria-invalid={Boolean(errors.scope)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.scope ? "text-destructive" : undefined}>
+                                    {errors.scope?.message ?? "Space-separated list of scopes the client may request."}
                                 </FieldDescription>
                             </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="client_uri">Client URI</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="client_uri"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="client_uri"
+                                            placeholder="https://client.example.com"
+                                            aria-invalid={Boolean(errors.client_uri)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.client_uri ? "text-destructive" : undefined}>
+                                    {errors.client_uri?.message ?? "URL of the client's home page."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="logo_uri">Logo URI</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="logo_uri"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="logo_uri"
+                                            placeholder="https://client.example.com/logo.png"
+                                            aria-invalid={Boolean(errors.logo_uri)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.logo_uri ? "text-destructive" : undefined}>
+                                    {errors.logo_uri?.message ?? "URL of the client logo for consent screens."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="contacts">Contacts</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="contacts"
+                                    render={({ field }) => (
+                                        <Input
+                                            id="contacts"
+                                            value={Array.isArray(field.value) ? field.value.join(", ") : ""}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                const arr = v ? v.split(",").map((s) => s.trim()).filter(Boolean) : [];
+                                                field.onChange(arr);
+                                            }}
+                                            placeholder="admin@example.com, support@example.com"
+                                            aria-invalid={Boolean(errors.contacts)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.contacts ? "text-destructive" : undefined}>
+                                    {errors.contacts?.message ?? "Comma-separated contact emails."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="tos_uri">Terms of Service URI</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="tos_uri"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="tos_uri"
+                                            placeholder="https://client.example.com/tos"
+                                            aria-invalid={Boolean(errors.tos_uri)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.tos_uri ? "text-destructive" : undefined}>
+                                    {errors.tos_uri?.message ?? "URL of the client's terms of service."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="policy_uri">Policy URI</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="policy_uri"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="policy_uri"
+                                            placeholder="https://client.example.com/policy"
+                                            aria-invalid={Boolean(errors.policy_uri)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.policy_uri ? "text-destructive" : undefined}>
+                                    {errors.policy_uri?.message ?? "URL of the client's policy document."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="software_id">Software ID</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="software_id"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="software_id"
+                                            placeholder="Optional software identifier"
+                                            aria-invalid={Boolean(errors.software_id)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.software_id ? "text-destructive" : undefined}>
+                                    {errors.software_id?.message ?? "Optional software product identifier."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="software_version">Software Version</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="software_version"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="software_version"
+                                            placeholder="1.0.0"
+                                            aria-invalid={Boolean(errors.software_version)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.software_version ? "text-destructive" : undefined}>
+                                    {errors.software_version?.message ?? "Optional software version."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel htmlFor="software_statement">Software Statement URI</FieldLabel>
+                                <Controller
+                                    control={control}
+                                    name="software_statement"
+                                    render={({ field }) => (
+                                        <Input
+                                            {...field}
+                                            id="software_statement"
+                                            placeholder="https://example.com/software-statement.jwt"
+                                            aria-invalid={Boolean(errors.software_statement)}
+                                        />
+                                    )}
+                                />
+                                <FieldDescription className={errors.software_statement ? "text-destructive" : undefined}>
+                                    {errors.software_statement?.message ?? "URL of a signed software statement (JWT)."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel>Post-logout Redirect URIs</FieldLabel>
+                                <div className="space-y-2">
+                                    {postLogoutUriValues.map((_, index) => (
+                                        <div key={`post-logout-${index}`} className="grid grid-cols-[1fr_auto] gap-2">
+                                            <Controller
+                                                control={control}
+                                                name={`post_logout_redirect_uris.${index}`}
+                                                render={({ field: uriField }) => (
+                                                    <Input
+                                                        {...uriField}
+                                                        placeholder="https://client.example.com/post-logout"
+                                                        aria-invalid={Boolean(Array.isArray(errors.post_logout_redirect_uris) && errors.post_logout_redirect_uris[index])}
+                                                    />
+                                                )}
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => removePostLogoutUri(index)}
+                                                aria-label="Remove post-logout redirect URI"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-1"
+                                        onClick={addPostLogoutUri}
+                                    >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Add Post-logout Redirect URI
+                                    </Button>
+                                </div>
+                                <FieldDescription>
+                                    Optional URIs to redirect after end session. Leave empty to disable.
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel>Grant Types</FieldLabel>
+                                <div className="flex flex-wrap gap-4 pt-2">
+                                    {(["authorization_code", "client_credentials", "refresh_token"] as const).map((grant) => (
+                                        <Controller
+                                            key={grant}
+                                            control={control}
+                                            name="grant_types"
+                                            render={({ field }) => {
+                                                const selected = Array.isArray(field.value) ? field.value : [];
+                                                const checked = selected.includes(grant);
+                                                return (
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <Checkbox
+                                                            checked={checked}
+                                                            onCheckedChange={(checked) => {
+                                                                const next = checked
+                                                                    ? [...selected, grant]
+                                                                    : selected.filter((g) => g !== grant);
+                                                                field.onChange(next);
+                                                            }}
+                                                            aria-invalid={Boolean(errors.grant_types)}
+                                                        />
+                                                        <span className="text-sm capitalize">{grant.replace(/_/g, " ")}</span>
+                                                    </label>
+                                                );
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                                <FieldDescription className={errors.grant_types ? "text-destructive" : undefined}>
+                                    {errors.grant_types?.message ?? "Allowed OAuth 2.0 grant types."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <FieldLabel>Response Types</FieldLabel>
+                                <div className="flex flex-wrap gap-4 pt-2">
+                                    <Controller
+                                        control={control}
+                                        name="response_types"
+                                        render={({ field }) => {
+                                            const selected = Array.isArray(field.value) ? field.value : [];
+                                            const checked = selected.includes("code");
+                                            return (
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        onCheckedChange={(checked) => {
+                                                            field.onChange(checked ? ["code"] : []);
+                                                        }}
+                                                        aria-invalid={Boolean(errors.response_types)}
+                                                    />
+                                                    <span className="text-sm">code</span>
+                                                </label>
+                                            );
+                                        }}
+                                    />
+                                </div>
+                                <FieldDescription className={errors.response_types ? "text-destructive" : undefined}>
+                                    {errors.response_types?.message ?? "Authorization code flow is typically used."}
+                                </FieldDescription>
+                            </Field>
+
+                            <Field>
+                                <div className="flex items-center gap-2 pt-2">
+                                    <Controller
+                                        control={control}
+                                        name="skip_consent"
+                                        render={({ field }) => (
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <Checkbox
+                                                    checked={Boolean(field.value)}
+                                                    onCheckedChange={(checked) => field.onChange(!!checked)}
+                                                    aria-invalid={Boolean(errors.skip_consent)}
+                                                />
+                                                <span className="text-sm font-medium">Skip consent screen</span>
+                                            </label>
+                                        )}
+                                    />
+                                </div>
+                                <FieldDescription className={errors.skip_consent ? "text-destructive" : undefined}>
+                                    {errors.skip_consent?.message ?? "If enabled, users will not see a consent screen for this client."}
+                                </FieldDescription>
+                            </Field>
+
                         </FieldGroup>
 
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-end gap-4">
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={handleRegenerateSecret}
-                                disabled={regeneratingSecret || !client.clientSecret}
+                                onClick={() => router.push("/admin/clients" as Route)}
                             >
-                                <RefreshCw className={`h-4 w-4 mr-2 ${regeneratingSecret ? "animate-spin" : ""}`} />
-                                Regenerate Secret
+                                Cancel
                             </Button>
-
-                            <div className="flex items-center space-x-4">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => router.push("/admin/clients" as Route)}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={isSubmitting}>
-                                    {isSubmitting ? "Saving..." : "Save Changes"}
-                                </Button>
-                            </div>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting ? "Saving..." : "Save Changes"}
+                            </Button>
                         </div>
                     </form>
-                </CardContent>
-            </Card>
-
-            <Card className="max-w-2xl">
-                <CardHeader>
-                    <CardTitle>Client Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                        <span>Client ID:</span>
-                        <code className="text-sm bg-muted px-2 py-1 rounded">{client.clientId}</code>
-                    </div>
-                    {client.clientSecret && (
-                        <div className="flex justify-between items-center">
-                            <span>Client Secret:</span>
-                            <div className="flex items-center gap-2">
-                                <code className="text-sm bg-muted px-2 py-1 rounded">
-                                    {client.clientSecret}
-                                </code>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    type="button"
-                                    onClick={() => setShowSecret(!showSecret)}
-                                >
-                                    {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-                    <div className="flex justify-between">
-                        <span>Type:</span>
-                        <span>{client.type}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>Status:</span>
-                        <span className={client.disabled ? "text-red-600" : "text-green-600"}>
-                            {client.disabled ? "Disabled" : "Enabled"}
-                        </span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>Created:</span>
-                        <span>{new Date(client.createdAt).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>Last Updated:</span>
-                        <span>{new Date(client.updatedAt).toLocaleDateString()}</span>
-                    </div>
-                </CardContent>
-            </Card>
 
             <ConfirmationDialog
                 open={rotateConfirmOpen}
@@ -503,8 +853,8 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
                 <SecretDisplayDialog
                     open={secretDialogOpen}
                     onOpenChange={setSecretDialogOpen}
-                    clientName={client.name}
-                    clientId={client.clientId}
+                    clientName={client.client_name ?? ""}
+                    clientId={client.client_id}
                     clientSecret={newSecret}
                 />
             )}

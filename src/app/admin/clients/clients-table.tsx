@@ -1,138 +1,81 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import {
-    MoreHorizontal,
-    Search,
-    Plus,
-    Eye,
-    Trash2,
-    ChevronLeft,
-    ChevronRight,
-    Key,
-    Globe
-} from "lucide-react";
+import { Search, Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Key } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import Image from "next/image";
+import { authClient } from "@/lib/auth-client";
+import { useOAuthClients, type OAuthClientRow } from "@/hooks/use-oauth-clients";
 
-interface OAuthClient {
-    id: string;
-    name: string;
-    clientId: string;
-    clientSecret?: string;
-    redirectURIs: string[];
-    type: string;
-    disabled?: boolean;
-    icon?: string;
-    metadata?: string;
-    createdAt: string;
-    updatedAt: string;
-}
+const PAGE_SIZE = 10;
 
-interface ClientsResponse {
-    clients: OAuthClient[];
-    total: number;
-    limit: number;
-    offset: number;
+function formatDate(value: string | number | Date | undefined): string {
+    if (value == null) return "—";
+    return new Date(value).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 }
 
 export function OAuthClientsTable() {
-    const [clients, setClients] = useState<OAuthClient[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
+    const { clients: allClients, isLoading, error, mutate } = useOAuthClients();
     const [searchTerm, setSearchTerm] = useState("");
     const [currentPage, setCurrentPage] = useState(0);
-    const [totalClients, setTotalClients] = useState(0);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [clientToDelete, setClientToDelete] = useState<string | null>(null);
 
-    const limit = 100;
-    const totalPages = Math.ceil(totalClients / limit);
+    const filteredClients = useMemo(() => {
+        if (!searchTerm.trim()) return allClients;
+        const q = searchTerm.toLowerCase();
+        return allClients.filter(
+            (c) =>
+                (c.client_name ?? "").toLowerCase().includes(q) ||
+                (c.client_id ?? "").toLowerCase().includes(q)
+        );
+    }, [allClients, searchTerm]);
 
-    const fetchClients = async (page = 0, search = "") => {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const params = new URLSearchParams({
-                limit: limit.toString(),
-                offset: (page * limit).toString(),
-            });
-
-            if (search) {
-                params.append('search', search);
-            }
-
-            const response = await fetch(`/api/admin/oauth-clients?${params}`);
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch OAuth clients');
-            }
-
-            const data: ClientsResponse = await response.json();
-            setClients(data.clients);
-            setTotalClients(data.total);
-        } catch (err) {
-            console.error('Error fetching OAuth clients:', err);
-            setError(err instanceof Error ? err.message : 'Failed to fetch OAuth clients');
-        } finally {
-            setLoading(false);
-        }
-    };
+    const totalClients = filteredClients.length;
+    const totalPages = Math.max(1, Math.ceil(totalClients / PAGE_SIZE));
+    const paginatedClients = useMemo(
+        () =>
+            filteredClients.slice(
+                currentPage * PAGE_SIZE,
+                currentPage * PAGE_SIZE + PAGE_SIZE
+            ),
+        [filteredClients, currentPage]
+    );
 
     const handleSearch = (value: string) => {
         setSearchTerm(value);
         setCurrentPage(0);
-        fetchClients(0, value);
     };
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
-        fetchClients(page, searchTerm);
     };
 
-    const handleToggleDisabled = async (clientId: string, currentDisabled: boolean) => {
-        try {
-            setActionLoading(clientId);
-
-            const response = await fetch(`/api/admin/oauth-clients/${clientId}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    disabled: !currentDisabled
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update client status');
-            }
-
-            // Refresh the clients list
-            await fetchClients(currentPage, searchTerm);
-        } catch (err) {
-            console.error('Error updating client status:', err);
-            setError(err instanceof Error ? err.message : 'Failed to update client');
-        } finally {
-            setActionLoading(null);
-        }
+    const handleRowClick = (clientId: string) => {
+        router.push(`/admin/clients/${clientId}`);
     };
 
-    const handleDeleteClient = (clientId: string) => {
+    const handleDeleteClient = (e: React.MouseEvent, clientId: string) => {
+        e.stopPropagation();
         setClientToDelete(clientId);
         setDeleteDialogOpen(true);
     };
@@ -143,38 +86,22 @@ export function OAuthClientsTable() {
         try {
             setActionLoading(clientToDelete);
 
-            const response = await fetch(`/api/admin/oauth-clients/${clientToDelete}`, {
-                method: 'DELETE'
+            const result = await authClient.oauth2.deleteClient({
+                client_id: clientToDelete,
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to delete client');
+            if (result.error) {
+                throw new Error(result.error.message ?? "Failed to delete client");
             }
 
-            // Refresh the clients list
-            await fetchClients(currentPage, searchTerm);
+            await mutate();
             setDeleteDialogOpen(false);
             setClientToDelete(null);
         } catch (err) {
-            console.error('Error deleting client:', err);
-            setError(err instanceof Error ? err.message : 'Failed to delete client');
+            console.error("Error deleting client:", err);
         } finally {
             setActionLoading(null);
         }
-    };
-
-    useEffect(() => {
-        fetchClients();
-    }, []);
-
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
     };
 
     return (
@@ -205,149 +132,180 @@ export function OAuthClientsTable() {
                 </Alert>
             )}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>OAuth Clients ({totalClients})</CardTitle>
-                    <CardDescription>
-                        Manage OAuth2/OIDC client applications
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {loading ? (
-                        <div className="space-y-4">
-                            {[...Array(5)].map((_, i) => (
-                                <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
-                                    <div className="h-10 w-10 bg-muted rounded-full animate-pulse" />
-                                    <div className="space-y-2 flex-1">
-                                        <div className="h-4 bg-muted rounded animate-pulse w-1/4" />
-                                        <div className="h-3 bg-muted rounded animate-pulse w-1/3" />
-                                    </div>
-                                    <div className="h-6 bg-muted rounded animate-pulse w-16" />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {clients.map((client) => (
-                                <div key={client.id} className="flex items-center justify-between p-4 border rounded-lg">
-                                    <div className="flex items-center space-x-4">
-                                        <div className="h-10 w-10 bg-primary/10 rounded-full flex items-center justify-center">
-                                            {client.icon ? (
-                                                <Image src={client.icon} alt={client.name} className="h-8 w-8 rounded-full" width={32} height={32} />
-                                            ) : (
-                                                <Key className="h-5 w-5 text-primary" />
-                                            )}
-                                        </div>
-                                        <div>
-                                            <div className="font-medium">{client.name}</div>
-                                            <div className="text-sm text-muted-foreground">
-                                                Client ID: {client.clientId}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                Created: {formatDate(client.createdAt)}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center space-x-2">
-                                        <Badge variant={client.type === 'confidential' ? 'default' : 'secondary'}>
-                                            {client.type}
-                                        </Badge>
-
-                                        <Badge variant={client.disabled ? 'destructive' : 'default'}>
-                                            {client.disabled ? 'Disabled' : 'Enabled'}
-                                        </Badge>
-
-                                        {client.clientSecret && (
-                                            <Badge variant="outline" className="font-mono text-xs">
-                                                {client.clientSecret}
-                                            </Badge>
-                                        )}
-
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    disabled={actionLoading === client.clientId}
-                                                >
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem asChild>
-                                                    <Link href={`/admin/clients/${client.clientId}`}>
-                                                        <Eye className="h-4 w-4 mr-2" />
-                                                        View Details
-                                                    </Link>
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    onClick={() => handleToggleDisabled(client.clientId, client.disabled || false)}
-                                                    disabled={actionLoading === client.clientId}
-                                                >
-                                                    {client.disabled ? (
-                                                        <>
-                                                            <Globe className="h-4 w-4 mr-2" />
-                                                            Enable Client
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Globe className="h-4 w-4 mr-2" />
-                                                            Disable Client
-                                                        </>
+            <div className="rounded-lg border bg-card">
+                <div className="px-4 py-3 border-b">
+                    <h2 className="text-lg font-semibold">OAuth Clients ({totalClients})</h2>
+                    <p className="text-sm text-muted-foreground">
+                        Click a row to edit. Use the buttons for quick actions.
+                    </p>
+                </div>
+                {isLoading ? (
+                    <div className="p-4 space-y-3">
+                        {[...Array(8)].map((_, i) => (
+                            <div
+                                key={i}
+                                className="h-12 bg-muted/50 rounded animate-pulse"
+                                style={{ width: i === 2 ? "70%" : "100%" }}
+                            />
+                        ))}
+                    </div>
+                ) : paginatedClients.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                        No OAuth clients found
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b bg-muted/50 text-left text-sm font-medium text-muted-foreground">
+                                    <th className="h-10 px-4 py-2 font-medium">Client</th>
+                                    <th className="h-10 px-4 py-2 font-medium">Status</th>
+                                    <th className="h-10 px-4 py-2 font-medium">Created</th>
+                                    <th className="h-10 px-4 py-2 font-medium w-[1%] text-right">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paginatedClients.map((client: OAuthClientRow) => {
+                                    const createdAt = (client as { createdAt?: string }).createdAt;
+                                    return (
+                                        <tr
+                                            key={client.client_id}
+                                            onClick={() => handleRowClick(client.client_id)}
+                                            className="border-b transition-colors hover:bg-muted/50 cursor-pointer last:border-b-0"
+                                        >
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-9 w-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                                                        {client.logo_uri ? (
+                                                            <Image
+                                                                src={client.logo_uri}
+                                                                alt={client.client_name ?? client.client_id}
+                                                                className="h-8 w-8 rounded-full object-cover"
+                                                                width={32}
+                                                                height={32}
+                                                            />
+                                                        ) : (
+                                                            <Key className="h-4 w-4 text-primary" />
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium">
+                                                            {client.client_name ?? client.client_id}
+                                                        </div>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            {client.client_id}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    <Badge
+                                                        variant={client.public ? "secondary" : "default"}
+                                                        className="text-xs"
+                                                    >
+                                                        {client.type ?? "web"}
+                                                    </Badge>
+                                                    <Badge
+                                                        variant={client.disabled ? "destructive" : "default"}
+                                                        className="text-xs"
+                                                    >
+                                                        {client.disabled ? "Disabled" : "Enabled"}
+                                                    </Badge>
+                                                    {client.client_secret && (
+                                                        <Badge variant="outline" className="text-xs font-mono">
+                                                            Confidential
+                                                        </Badge>
                                                     )}
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    onClick={() => handleDeleteClient(client.clientId)}
-                                                    disabled={actionLoading === client.clientId}
-                                                    className="text-destructive"
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                                                {formatDate(createdAt)}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <div
+                                                    className="flex items-center justify-end gap-1"
+                                                    onClick={(e) => e.stopPropagation()}
                                                 >
-                                                    <Trash2 className="h-4 w-4 mr-2" />
-                                                    Delete Client
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                </div>
-                            ))}
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8"
+                                                                asChild
+                                                            >
+                                                                <Link href={`/admin/clients/${client.client_id}`}>
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Link>
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="left">
+                                                            <p>Edit client</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="inline-flex">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                                    disabled={actionLoading === client.client_id}
+                                                                    onClick={(e) =>
+                                                                        handleDeleteClient(e, client.client_id)
+                                                                    }
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="left">
+                                                            <p>Delete client</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
-                            {clients.length === 0 && (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    No OAuth clients found
-                                </div>
-                            )}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t">
+                        <div className="text-sm text-muted-foreground">
+                            Showing {currentPage * PAGE_SIZE + 1} to{" "}
+                            {Math.min((currentPage + 1) * PAGE_SIZE, totalClients)} of{" "}
+                            {totalClients} clients
                         </div>
-                    )}
-
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-6">
-                            <div className="text-sm text-muted-foreground">
-                                Showing {currentPage * limit + 1} to {Math.min((currentPage + 1) * limit, totalClients)} of {totalClients} clients
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handlePageChange(currentPage - 1)}
-                                    disabled={currentPage === 0}
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                    Previous
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handlePageChange(currentPage + 1)}
-                                    disabled={currentPage >= totalPages - 1}
-                                >
-                                    Next
-                                    <ChevronRight className="h-4 w-4" />
-                                </Button>
-                            </div>
+                        <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 0}
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                                Previous
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage >= totalPages - 1}
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
+                )}
+            </div>
 
             <ConfirmationDialog
                 open={deleteDialogOpen}

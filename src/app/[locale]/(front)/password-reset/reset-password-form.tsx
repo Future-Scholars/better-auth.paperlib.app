@@ -66,7 +66,7 @@ export function ResetPasswordForm({ locale, token }: { locale: Locale, token?: s
                 return;
             }
 
-            const { data, error } = await authClient.resetPassword({
+            const { error } = await authClient.resetPassword({
                 newPassword,
                 token,
             });
