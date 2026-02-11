@@ -141,6 +141,10 @@ export function CreateOAuthClientForm() {
                 contacts: contacts.length ? contacts : undefined,
                 tos_uri: values.tos_uri?.trim() || undefined,
                 policy_uri: values.policy_uri?.trim() || undefined,
+                software_id: undefined,
+                software_version: undefined,
+                software_statement: undefined,
+                post_logout_redirect_uris: undefined,
             });
 
             if (result.error) {
@@ -289,223 +293,223 @@ export function CreateOAuthClientForm() {
     }
 
     return (
-        <Card className="max-w-2xl">
-            <CardHeader>
-                <CardTitle>OAuth Client Information</CardTitle>
-                <CardDescription>
-                    Enter the details for the new OAuth client application
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                    {serverError && (
-                        <Alert variant="destructive">
-                            <CircleAlert className="h-4 w-4" />
-                            <AlertTitle>Error</AlertTitle>
-                            <AlertDescription>{serverError}</AlertDescription>
-                        </Alert>
-                    )}
+        // <Card className="max-w-2xl">
+        //     <CardHeader>
+        //         <CardTitle>OAuth Client Information</CardTitle>
+        //         <CardDescription>
+        //             Enter the details for the new OAuth client application
+        //         </CardDescription>
+        //     </CardHeader>
+        //     <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {serverError && (
+                <Alert variant="destructive">
+                    <CircleAlert className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{serverError}</AlertDescription>
+                </Alert>
+            )}
 
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="client_name">Client Name *</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="client_name"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="client_name"
-                                        placeholder="My OAuth Client"
-                                        aria-invalid={Boolean(errors.client_name)}
-                                    />
-                                )}
+            <FieldGroup>
+                <Field>
+                    <FieldLabel htmlFor="client_name">Client Name *</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="client_name"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="client_name"
+                                placeholder="My OAuth Client"
+                                aria-invalid={Boolean(errors.client_name)}
                             />
-                            <FieldDescription>
-                                {errors.client_name?.message ?? "Provide a human-friendly name for this client."}
-                            </FieldDescription>
-                        </Field>
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.client_name?.message ?? "Provide a human-friendly name for this client."}
+                    </FieldDescription>
+                </Field>
 
-                        <Field>
-                            <FieldLabel>Redirect URIs *</FieldLabel>
-                            <div className="space-y-2">
-                                {redirectUriValues.map((_, index) => (
-                                    <div key={`redirect-uri-${index}`} className="grid grid-cols-[1fr_auto] gap-2">
-                                        <Controller
-                                            control={control}
-                                            name={`redirectUris.${index}`}
-                                            render={({ field: redirectField }) => (
-                                                <Input
-                                                    {...redirectField}
-                                                    placeholder="https://client.example.com/callback"
-                                                    aria-invalid={Boolean(Array.isArray(errors.redirectUris) && errors.redirectUris[index]?.message)}
-                                                />
-                                            )}
+                <Field>
+                    <FieldLabel>Redirect URIs *</FieldLabel>
+                    <div className="space-y-2">
+                        {redirectUriValues.map((_, index) => (
+                            <div key={`redirect-uri-${index}`} className="grid grid-cols-[1fr_auto] gap-2">
+                                <Controller
+                                    control={control}
+                                    name={`redirectUris.${index}`}
+                                    render={({ field: redirectField }) => (
+                                        <Input
+                                            {...redirectField}
+                                            placeholder="https://client.example.com/callback"
+                                            aria-invalid={Boolean(Array.isArray(errors.redirectUris) && errors.redirectUris[index]?.message)}
                                         />
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => removeRedirectUri(index)}
-                                            disabled={redirectUriValues.length === 1}
-                                            aria-label="Remove redirect URI"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ))}
+                                    )}
+                                />
                                 <Button
                                     type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="mt-1"
-                                    onClick={addRedirectUri}
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => removeRedirectUri(index)}
+                                    disabled={redirectUriValues.length === 1}
+                                    aria-label="Remove redirect URI"
                                 >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Add Redirect URI
+                                    <X className="h-4 w-4" />
                                 </Button>
                             </div>
-                            <FieldDescription className={redirectUriHelperText ? "text-destructive" : undefined}>
-                                {redirectUriHelperText || "Each redirect URI must be unique and use HTTPS (localhost allowed)."}
-                            </FieldDescription>
-                            {Array.isArray(errors.redirectUris) && errors.redirectUris.map((errorItem, index) => (
-                                errorItem?.message ? (
-                                    <FieldDescription key={`redirect-uri-error-${index}`} className="text-destructive">
-                                        {`Redirect URI #${index + 1}: ${errorItem.message}`}
-                                    </FieldDescription>
-                                ) : null
-                            ))}
-                        </Field>
-
-                        <Field>
-                            <FieldLabel htmlFor="client_uri">Client URI</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="client_uri"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="client_uri"
-                                        placeholder="https://client.example.com"
-                                        aria-invalid={Boolean(errors.client_uri)}
-                                    />
-                                )}
-                            />
-                            <FieldDescription>
-                                {errors.client_uri?.message ?? "Public homepage for this client (optional)."}
-                            </FieldDescription>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel htmlFor="logo_uri">Logo URI</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="logo_uri"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="logo_uri"
-                                        placeholder="https://client.example.com/logo.png"
-                                        aria-invalid={Boolean(errors.logo_uri)}
-                                    />
-                                )}
-                            />
-                            <FieldDescription>
-                                {errors.logo_uri?.message ?? "Logo displayed in consent screens (optional)."}
-                            </FieldDescription>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel htmlFor="scope">Scopes</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="scope"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="scope"
-                                        placeholder="openid profile email"
-                                        aria-invalid={Boolean(errors.scope)}
-                                    />
-                                )}
-                            />
-                            <FieldDescription>
-                                {errors.scope?.message ?? "Space-separated list of scopes the client can request."}
-                            </FieldDescription>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel htmlFor="contacts">Contacts</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="contacts"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="contacts"
-                                        placeholder="admin@client.example.com, support@client.example.com"
-                                        aria-invalid={Boolean(errors.contacts)}
-                                    />
-                                )}
-                            />
-                            <FieldDescription>
-                                {errors.contacts?.message ?? "Comma-separated email addresses (optional)."}
-                            </FieldDescription>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel htmlFor="tos_uri">Terms of Service URI</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="tos_uri"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="tos_uri"
-                                        placeholder="https://client.example.com/tos"
-                                        aria-invalid={Boolean(errors.tos_uri)}
-                                    />
-                                )}
-                            />
-                            <FieldDescription>
-                                {errors.tos_uri?.message ?? "Link to the client's terms of service (optional)."}
-                            </FieldDescription>
-                        </Field>
-
-                        <Field>
-                            <FieldLabel htmlFor="policy_uri">Privacy Policy URI</FieldLabel>
-                            <Controller
-                                control={control}
-                                name="policy_uri"
-                                render={({ field }) => (
-                                    <Input
-                                        {...field}
-                                        id="policy_uri"
-                                        placeholder="https://client.example.com/privacy"
-                                        aria-invalid={Boolean(errors.policy_uri)}
-                                    />
-                                )}
-                            />
-                            <FieldDescription>
-                                {errors.policy_uri?.message ?? "Link to the client's privacy policy (optional)."}
-                            </FieldDescription>
-                        </Field>
-                    </FieldGroup>
-
-                    <div className="flex items-center justify-end space-x-4">
+                        ))}
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={() => router.push("/admin/clients")}
+                            size="sm"
+                            className="mt-1"
+                            onClick={addRedirectUri}
                         >
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? "Creating..." : "Create Client"}
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Redirect URI
                         </Button>
                     </div>
-                </form>
-            </CardContent>
-        </Card>
+                    <FieldDescription className={redirectUriHelperText ? "text-destructive" : undefined}>
+                        {redirectUriHelperText || "Each redirect URI must be unique and use HTTPS (localhost allowed)."}
+                    </FieldDescription>
+                    {Array.isArray(errors.redirectUris) && errors.redirectUris.map((errorItem, index) => (
+                        errorItem?.message ? (
+                            <FieldDescription key={`redirect-uri-error-${index}`} className="text-destructive">
+                                {`Redirect URI #${index + 1}: ${errorItem.message}`}
+                            </FieldDescription>
+                        ) : null
+                    ))}
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor="client_uri">Client URI</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="client_uri"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="client_uri"
+                                placeholder="https://client.example.com"
+                                aria-invalid={Boolean(errors.client_uri)}
+                            />
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.client_uri?.message ?? "Public homepage for this client (optional)."}
+                    </FieldDescription>
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor="logo_uri">Logo URI</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="logo_uri"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="logo_uri"
+                                placeholder="https://client.example.com/logo.png"
+                                aria-invalid={Boolean(errors.logo_uri)}
+                            />
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.logo_uri?.message ?? "Logo displayed in consent screens (optional)."}
+                    </FieldDescription>
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor="scope">Scopes</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="scope"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="scope"
+                                placeholder="openid profile email"
+                                aria-invalid={Boolean(errors.scope)}
+                            />
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.scope?.message ?? "Space-separated list of scopes the client can request."}
+                    </FieldDescription>
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor="contacts">Contacts</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="contacts"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="contacts"
+                                placeholder="admin@client.example.com, support@client.example.com"
+                                aria-invalid={Boolean(errors.contacts)}
+                            />
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.contacts?.message ?? "Comma-separated email addresses (optional)."}
+                    </FieldDescription>
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor="tos_uri">Terms of Service URI</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="tos_uri"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="tos_uri"
+                                placeholder="https://client.example.com/tos"
+                                aria-invalid={Boolean(errors.tos_uri)}
+                            />
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.tos_uri?.message ?? "Link to the client's terms of service (optional)."}
+                    </FieldDescription>
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor="policy_uri">Privacy Policy URI</FieldLabel>
+                    <Controller
+                        control={control}
+                        name="policy_uri"
+                        render={({ field }) => (
+                            <Input
+                                {...field}
+                                id="policy_uri"
+                                placeholder="https://client.example.com/privacy"
+                                aria-invalid={Boolean(errors.policy_uri)}
+                            />
+                        )}
+                    />
+                    <FieldDescription>
+                        {errors.policy_uri?.message ?? "Link to the client's privacy policy (optional)."}
+                    </FieldDescription>
+                </Field>
+            </FieldGroup>
+
+            <div className="flex items-center justify-end space-x-4">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.push("/admin/clients")}
+                >
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Creating..." : "Create Client"}
+                </Button>
+            </div>
+        </form>
+        //  </CardContent> 
+        // </Card>
     );
 }

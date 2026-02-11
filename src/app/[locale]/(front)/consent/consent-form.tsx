@@ -7,9 +7,7 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 interface ConsentFormProps {
-  consentCode: string;
   clientName: string;
-  clientId?: string;
   scopes: string[];
   scopeDescriptions: Record<string, { displayName: string; description: string }>;
   dict: {
@@ -31,7 +29,7 @@ interface ConsentFormProps {
   };
 }
 
-export function ConsentForm({ consentCode, clientName, scopes, scopeDescriptions, dict }: ConsentFormProps) {
+export function ConsentForm({ clientName, scopes, scopeDescriptions, dict }: ConsentFormProps) {
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isDenying, setIsDenying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,20 +45,16 @@ export function ConsentForm({ consentCode, clientName, scopes, scopeDescriptions
     try {
       const res = await authClient.oauth2.consent({
         accept,
-        consent_code: consentCode,
+        scope: scopes.join(' '),
       });
 
       if (res.error) {
         setError(dict.authorizationFailed);
         setIsAuthorizing(false);
         setIsDenying(false);
-      } else {
-        // Redirect will happen automatically by the server
-        // If there's a redirect URL in the response, use it
-        if (res.data?.redirectURI) {
-          window.location.href = res.data.redirectURI;
-        }
-      }
+      } 
+      // Redirect will happen automatically by the server
+      // Nothing to do here
     } catch (err) {
       setError(dict.authorizationFailed);
       console.error('Error authorizing consent:', err);

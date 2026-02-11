@@ -5,10 +5,10 @@ import { Locale } from "@/lib/i18n";
 import { ConsentForm } from "./consent-form";
 import Link from "next/link";
 import { getDictionary } from "@/lib/i18n/server";
-import { getScopeDescription } from "@/lib/auth";
+import { auth, getScopeDescription } from "@/lib/auth";
 import Logo from "@/components/logo";
 import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { headers } from "next/headers";
 
 interface ConsentPageProps {
   params: Promise<{ locale: Locale }>;
@@ -19,24 +19,22 @@ interface ConsentPageProps {
   }>;
 }
 
-function getClient(client_id: string) {
-  return db.selectFrom('oauthApplication')
-    .where('clientId', '=', client_id)
-    .selectAll()
-    .executeTakeFirst();
-}
 
 export default async function ConsentPage({ params, searchParams }: ConsentPageProps) {
   const { locale } = await params;
-  const { consent_code, client_id, scope } = await searchParams;
+  const { client_id, scope } = await searchParams;
   const dict = await getDictionary(locale);
-  if (!client_id) {
+  if (!client_id || !scope) {
     return notFound();
   }
-  const client = await getClient(client_id);
-  if (!client) {
-    return notFound();
-  }
+
+  const client = await auth.api.getOAuthClientPublic({
+    query: {
+      client_id: client_id,
+    },
+    headers: await headers()
+  });
+
   // Parse scopes from the scope parameter
   const scopes = scope ? scope.split(' ') : [];
 
@@ -69,40 +67,6 @@ export default async function ConsentPage({ params, searchParams }: ConsentPageP
       };
     }
   }
-  // Show error state if no consent_code is provided
-  if (!consent_code) {
-    return (
-      <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10 relative">
-        <div className="flex w-full max-w-sm flex-col gap-6">
-          <div className="flex items-center justify-center">
-            <Link href={`/${locale}`} >
-              <Logo className="flex items-center gap-2" />
-            </Link>
-          </div>
-          <Card>
-            <CardHeader className="text-center">
-              <div className="flex justify-center mb-4">
-                <div className="bg-destructive/10 text-destructive flex size-12 items-center justify-center rounded-full">
-                  <AlertCircle className="size-6" />
-                </div>
-              </div>
-              <CardTitle className="text-xl">{dict.pages.consent.error}</CardTitle>
-              <CardDescription>
-                {dict.pages.consent.missingConsentCode}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full">
-                <Link href={`/${locale}/login`}>
-                  {dict.pages.consent.backToLogin}
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 p-6 relative">
@@ -115,9 +79,7 @@ export default async function ConsentPage({ params, searchParams }: ConsentPageP
         </div>
         <div className="flex flex-col gap-6">
           <ConsentForm
-            clientName={client.name}
-            consentCode={consent_code}
-            clientId={client_id}
+            clientName={client.client_name ?? "The Application"}
             scopes={scopes}
             scopeDescriptions={scopeDescriptionsObject}
             dict={dict.pages.consent}
