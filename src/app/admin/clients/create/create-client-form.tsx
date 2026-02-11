@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert, CheckCircle, Copy, Key, Plus, X } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { Controller, useForm, type SubmitHandler } from "react-hook-form";
+import { Controller, useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SecretDisplayDialog } from "@/components/confirmation-dialog";
 import { z } from "zod";
@@ -61,7 +61,6 @@ export function CreateOAuthClientForm() {
         control,
         handleSubmit,
         reset,
-        watch,
         setValue,
         formState: { errors, isSubmitting },
     } = useForm<OAuthClientCreateFormInput>({
@@ -69,7 +68,7 @@ export function CreateOAuthClientForm() {
         defaultValues: oauthClientCreateFormDefaults,
     });
 
-    const watchedRedirectUris = watch("redirectUris") ?? [];
+    const watchedRedirectUris = useWatch({ control, name: "redirectUris", defaultValue: oauthClientCreateFormDefaults.redirectUris }) ?? [];
     const redirectUriValues = ensureAtLeastOneRedirectUri(watchedRedirectUris);
 
     const addRedirectUri = () => {

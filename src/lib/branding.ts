@@ -3,6 +3,9 @@
  * Loads branding information from environment variables, branding.json, or default values
  */
 
+import fs from 'fs';
+import path from 'path';
+
 export interface BrandingConfig {
   appName: string;              // Application name, e.g., "Zhuoling.Space"
   platformName: string;          // Platform name, e.g., "Zhuoling.Space"
@@ -44,8 +47,6 @@ function loadBrandingFromFile(): BrandingConfig | null {
     // Try to load from branding.json in the project root
     // Using dynamic import for Node.js modules in Next.js
     if (typeof window === 'undefined') {
-      const fs = require('fs');
-      const path = require('path');
       const brandingPath = path.join(process.cwd(), 'branding.json');
       
       if (fs.existsSync(brandingPath)) {

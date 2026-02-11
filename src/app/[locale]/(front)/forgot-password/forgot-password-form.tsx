@@ -26,7 +26,7 @@ export function ForgotPasswordForm({ locale, redirectTo }: { locale: Locale, red
             setLoading(true);
             const formData = new FormData(e.target as HTMLFormElement);
             const email = formData.get('email') as string;
-            const { data, error } = await authClient.requestPasswordReset({
+            const { error } = await authClient.requestPasswordReset({
                 email,
                 redirectTo,
             });

@@ -1,6 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
 import { Locale } from "@/lib/i18n";
 import { ConsentForm } from "./consent-form";
 import Link from "next/link";

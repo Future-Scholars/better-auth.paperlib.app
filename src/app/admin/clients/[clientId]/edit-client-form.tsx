@@ -182,7 +182,7 @@ export function EditOAuthClientForm({ clientId }: EditOAuthClientFormProps) {
             });
             setServerError(null);
         }
-    }, [client, reset]);
+    }, [client, reset, fetchError]);
 
     const onSubmit: SubmitHandler<OAuthClientUpdateFormInput> = async (values) => {
         setServerError(null);

@@ -2,6 +2,7 @@ import type { Kysely } from 'kysely'
 import { sql } from 'kysely'
 
 // `any` is required here since migrations should be frozen in time. alternatively, keep a "snapshot" db interface.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function up(db: Kysely<any>): Promise<void> {
 	// Create user table
 	await db.schema
@@ -221,6 +222,7 @@ export async function up(db: Kysely<any>): Promise<void> {
 }
 
 // `any` is required here since migrations should be frozen in time. alternatively, keep a "snapshot" db interface.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function down(db: Kysely<any>): Promise<void> {
 	// Drop tables in reverse order to handle foreign key constraints
 	await db.schema.dropTable('oauthConsent').execute()
